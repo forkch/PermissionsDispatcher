@@ -9,19 +9,32 @@ import com.android.tools.lint.detector.api.JavaContext;
 import com.android.tools.lint.detector.api.Scope;
 import com.android.tools.lint.detector.api.Severity;
 import com.intellij.psi.PsiType;
+import com.intellij.psi.impl.PsiClassImplUtil;
+import com.intellij.psi.search.GlobalSearchScope;
+import com.intellij.psi.util.InheritanceUtil;
+import com.intellij.psi.util.PsiClassUtil;
+import com.intellij.psi.util.PsiUtil;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.kotlin.js.translate.utils.PsiUtils;
+import org.jetbrains.kotlin.psi.psiUtil.PsiUtilsKt;
 import org.jetbrains.uast.UCallExpression;
 import org.jetbrains.uast.UClass;
 import org.jetbrains.uast.UElement;
+import org.jetbrains.uast.UElementKt;
 import org.jetbrains.uast.UExpression;
 import org.jetbrains.uast.UIdentifier;
 import org.jetbrains.uast.UMethod;
+import org.jetbrains.uast.UastClassKind;
+import org.jetbrains.uast.UastUtils;
+import org.jetbrains.uast.UastVisibility;
 import org.jetbrains.uast.visitor.AbstractUastVisitor;
 
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
+
+import javax.xml.bind.JAXBElement;
 
 public class NoDelegateOnResumeDetector extends Detector implements Detector.UastScanner {
     static final Issue ISSUE = Issue.create("NoDelegateOnResumeDetector",
@@ -79,6 +92,7 @@ public class NoDelegateOnResumeDetector extends Detector implements Detector.Uas
     private class OnResumeChecker extends AbstractUastVisitor {
         private final JavaContext context;
         private boolean isKotlin;
+        private boolean isActivity;
         private UClass uClass;
         private String needPermissionMethodName;
 
@@ -87,12 +101,45 @@ public class NoDelegateOnResumeDetector extends Detector implements Detector.Uas
             this.uClass = uClass;
             this.needPermissionMethodName = needPermissionMethodName;
             isKotlin = context.getPsiFile() != null && "kotlin".equals(context.getPsiFile().getLanguage().getID());
+            isActivity = isActivityClass(uClass);
         }
 
+        private boolean isActivityClass(UClass node) {
+            if (node == null) return false;
+            if ("android.app.Activity".equalsIgnoreCase(node.getQualifiedName())) return true;
+            return isActivityClass(node.getSuperClass());
+        }
+
+        /**
+         * @return return true if visiting end (if lint does not visit inside the method), false otherwise
+         */
         @Override
         public boolean visitMethod(UMethod node) {
             super.visitMethod(node);
-            return !"onResume".equalsIgnoreCase(node.getName());
+            if(!"onResume".equalsIgnoreCase(node.getName())) {
+                return true;
+            }
+
+            if(node.getReturnType() != PsiType.VOID) {
+                return true;
+            }
+
+            if(node.getUastParameters().size() != 0) {
+                return true;
+            }
+
+            UastVisibility visibility = node.getVisibility();
+            if (isActivity) {
+                if (visibility != UastVisibility.PUBLIC && visibility != UastVisibility.PROTECTED) {
+                    return true;
+                }
+            } else {
+                if (visibility != UastVisibility.PUBLIC) {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         @Override
