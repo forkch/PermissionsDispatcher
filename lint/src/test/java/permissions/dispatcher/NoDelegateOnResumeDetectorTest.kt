@@ -20,7 +20,7 @@ class NoDelegateOnResumeDetectorTest {
                     void showCamera() {
                     }
 
-                    void onResume() {
+                    protected void onResume() {
                         super.onResume();
                         FooPermissionsDispatcher.showCameraWithPermissionCheck(this);
                     }
@@ -54,7 +54,7 @@ class NoDelegateOnResumeDetectorTest {
 
                 @RuntimePermissions
                 public class Foo {
-                    void onResume() {
+                    protected void onResume() {
                         super.onResume();
                         FooPermissionsDispatcher.showCameraWithPermissionCheck(this);
                     }
